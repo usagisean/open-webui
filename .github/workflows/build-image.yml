@@ -2,11 +2,11 @@ name: Build ZX AI Image
 
 on:
   push:
-    branches: [ "main" ] # 只要你推送到 main，就自动构建
-    paths-ignore: # 忽略纯文档修改，省点资源
+    branches: [ "main" ]
+    paths-ignore:
       - '**.md'
       - 'docs/**'
-  workflow_dispatch: # 允许手动点击按钮触发
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write # 重要：允许写入镜像到你的 Packages
+      packages: write
 
     steps:
       - name: Checkout repository
@@ -29,6 +29,11 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- 修复点：新增 Buildx 支持 ---
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      # ---------------------------
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -46,6 +51,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # 开启缓存，让第二次构建快得飞起
           cache-from: type=gha
           cache-to: type=gha,mode=max
