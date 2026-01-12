@@ -21,10 +21,10 @@
 
             if (isDarkMode) {
                 const darkImage = new Image();
-                darkImage.src = `${WEBUI_BASE_URL}/static/favicon-dark.png`;
+                darkImage.src = `${WEBUI_BASE_URL}/static/favicon.png`;
 
                 darkImage.onload = () => {
-                    logo.src = `${WEBUI_BASE_URL}/static/favicon-dark.png`;
+                    logo.src = `${WEBUI_BASE_URL}/static/favicon.png`;
                     logo.style.filter = ''; 
                 };
 
