@@ -67,6 +67,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_KEY }}
+          port: ${{ secrets.VPS_PORT }}
           # 💡 下面是让 VPS 执行的命令
           # 假设你的 docker-compose.yaml 在 /root/nebula-ai 目录下
           script: |
