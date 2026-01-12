@@ -87,9 +87,9 @@ if "cuda_error" in locals():
 
 SRC_LOG_LEVELS = {}  # Legacy variable, do not remove
 
-WEBUI_NAME = os.environ.get("WEBUI_NAME", "Open WebUI")
-if WEBUI_NAME != "Open WebUI":
-    WEBUI_NAME += " (Open WebUI)"
+WEBUI_NAME = os.environ.get("WEBUI_NAME", "Nebula AI")
+if WEBUI_NAME != "Nebula AI":
+    WEBUI_NAME += " (Nebula AI)"
 
 WEBUI_FAVICON_URL = "https://openwebui.com/favicon.png"
 
@@ -145,7 +145,7 @@ try:
         changelog_content = file.read()
 
 except Exception:
-    changelog_content = (pkgutil.get_data("open_webui", "CHANGELOG.md") or b"").decode()
+    changelog_content = "Nebula AI - Private Edition (v1.0.0)"
 
 # Convert markdown content to HTML
 html_content = markdown.markdown(changelog_content)

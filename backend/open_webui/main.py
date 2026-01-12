@@ -567,17 +567,14 @@ class SPAStaticFiles(StaticFiles):
 
 print(
     rf"""
- ██████╗ ██████╗ ███████╗███╗   ██╗    ██╗    ██╗███████╗██████╗ ██╗   ██╗██╗
-██╔═══██╗██╔══██╗██╔════╝████╗  ██║    ██║    ██║██╔════╝██╔══██╗██║   ██║██║
-██║   ██║██████╔╝█████╗  ██╔██╗ ██║    ██║ █╗ ██║█████╗  ██████╔╝██║   ██║██║
-██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║    ██║███╗██║██╔══╝  ██╔══██╗██║   ██║██║
-╚██████╔╝██║     ███████╗██║ ╚████║    ╚███╔███╔╝███████╗██████╔╝╚██████╔╝██║
- ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝     ╚══╝╚══╝ ╚══════╝╚═════╝  ╚═════╝ ╚═╝
+ ███╗   ██╗███████╗██████╗ ██╗   ██╗██╗      █████╗       █████╗ ██╗
+ ████╗  ██║██╔════╝██╔══██╗██║   ██║██║     ██╔══██╗     ██╔══██╗██║
+ ██╔██╗ ██║█████╗  ██████╔╝██║   ██║██║     ███████║     ███████║██║
+ ██║╚██╗██║██╔══╝  ██╔══██╗██║   ██║██║     ██╔══██║     ██╔══██║██║
+ ██║ ╚████║███████╗██████╔╝╚██████╔╝███████╗██║  ██║     ██║  ██║██║
+ ╚═╝  ╚═══╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝     ╚═╝  ╚═╝╚═╝
 
-
-v{VERSION} - building the best AI user interface.
-{f"Commit: {WEBUI_BUILD_HASH}" if WEBUI_BUILD_HASH != "dev-build" else ""}
-https://github.com/open-webui/open-webui
+v{VERSION} - The Core of Zixiang Digital.
 """
 )
 
@@ -652,14 +649,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Open WebUI",
+    title="Nebula AI Core",
     docs_url="/docs" if ENV == "dev" else None,
     openapi_url="/openapi.json" if ENV == "dev" else None,
     redoc_url=None,
     lifespan=lifespan,
 )
 
-# For Open WebUI OIDC/OAuth2
+# For Nebula AI OIDC/OAuth2
 oauth_manager = OAuthManager(app)
 app.state.oauth_manager = oauth_manager
 
@@ -2105,7 +2102,7 @@ async def get_app_changelog():
 @app.get("/api/usage")
 async def get_current_usage(user=Depends(get_verified_user)):
     """
-    Get current usage statistics for Open WebUI.
+    Get current usage statistics for Nebula AI.
     This is an experimental endpoint and subject to change.
     """
     try:
@@ -2167,7 +2164,7 @@ try:
         app.add_middleware(
             StarSessionsMiddleware,
             store=redis_session_store,
-            cookie_name="owui-session",
+            cookie_name="nebula-session",
             cookie_same_site=WEBUI_SESSION_COOKIE_SAME_SITE,
             cookie_https_only=WEBUI_SESSION_COOKIE_SECURE,
         )
@@ -2178,7 +2175,7 @@ except Exception as e:
     app.add_middleware(
         SessionMiddleware,
         secret_key=WEBUI_SECRET_KEY,
-        session_cookie="owui-session",
+        session_cookie="nebula-session",
         same_site=WEBUI_SESSION_COOKIE_SAME_SITE,
         https_only=WEBUI_SESSION_COOKIE_SECURE,
     )

@@ -29,6 +29,8 @@ ARG BUILD_HASH
 
 # Set Node.js options (heap limit Allocation failed - JavaScript heap out of memory)
 # ENV NODE_OPTIONS="--max-old-space-size=4096"
+# ✅ [Sean Fix] 强制给 Node.js 分配 8GB 内存，防止构建崩溃
+ENV NODE_OPTIONS="--max-old-space-size=8192"
 
 WORKDIR /app
 
@@ -36,7 +38,10 @@ WORKDIR /app
 RUN apk add --no-cache git
 
 COPY package.json package-lock.json ./
-RUN npm ci --force
+
+# --- [Sean Fix 1] 使用宽容模式安装依赖，解决本地 Lock 文件冲突 ---
+# RUN npm ci --force
+RUN npm install --legacy-peer-deps
 
 COPY . .
 ENV APP_BUILD_HASH=${BUILD_HASH}
@@ -124,6 +129,9 @@ RUN echo -n 00000000-0000-0000-0000-000000000000 > $HOME/.cache/chroma/telemetry
 RUN chown -R $UID:$GID /app $HOME
 
 # Install common system dependencies
+# --- [Sean Fix 2] 切换 Debian 源为阿里云，解决国内 apt-get 网络超时 ---
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     git build-essential pandoc gcc netcat-openbsd curl jq \
@@ -170,7 +178,10 @@ RUN if [ "$USE_OLLAMA" = "true" ]; then \
 
 # copy built frontend files
 COPY --chown=$UID:$GID --from=build /app/build /app/build
-COPY --chown=$UID:$GID --from=build /app/CHANGELOG.md /app/CHANGELOG.md
+
+# ❌ [Sean Fix 3] 删除对 CHANGELOG.md 的引用，因为我们已经把源文件删了
+# COPY --chown=$UID:$GID --from=build /app/CHANGELOG.md /app/CHANGELOG.md
+
 COPY --chown=$UID:$GID --from=build /app/package.json /app/package.json
 
 # copy backend files

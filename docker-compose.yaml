@@ -1,32 +1,40 @@
-services:
-  ollama:
-    volumes:
-      - ollama:/root/.ollama
-    container_name: ollama
-    pull_policy: always
-    tty: true
-    restart: unless-stopped
-    image: ollama/ollama:${OLLAMA_DOCKER_TAG-latest}
+version: '3.8'
 
+services:
   open-webui:
+    # ✅ 核心配置：告诉 Docker 用当前目录 (.) 的代码来构建
     build:
       context: .
       dockerfile: Dockerfile
-    image: ghcr.io/open-webui/open-webui:${WEBUI_DOCKER_TAG-main}
+      args:
+        # 这个参数只是构建时需要，运行不需要本地 Ollama
+        OLLAMA_BASE_URL: '/ollama'
+
+    # ✅ 给本地镜像起个特殊名字，避免和官方镜像混淆
+    image: open-webui:local-dev-zxai
+
     container_name: open-webui
+    
+    # 数据卷：改为 local-data，给你一个干净的本地测试环境
     volumes:
-      - open-webui:/app/backend/data
-    depends_on:
-      - ollama
+      - open-webui-local-data:/app/backend/data
+
+    # 端口映射：访问 localhost:3000
     ports:
-      - ${OPEN_WEBUI_PORT-3000}:8080
+      - "3000:8080"
+
     environment:
-      - 'OLLAMA_BASE_URL=http://ollama:11434'
-      - 'WEBUI_SECRET_KEY='
+      - 'WEBUI_SECRET_KEY=dev_secret_key'
+      # 因为删除了 ollama 服务，这里不需要配 OLLAMA_BASE_URL
+      # 如果你想在本地测试聊天，可以在这里填你的 NewAPI 地址，不填也能启动 UI
+      # - OPENAI_API_BASE_URL=http://your-vps-ip:3001/v1
+      # - OPENAI_API_KEY=your-key
+
     extra_hosts:
-      - host.docker.internal:host-gateway
+      - "host.docker.internal:host-gateway"
+
     restart: unless-stopped
 
+# 定义卷
 volumes:
-  ollama: {}
-  open-webui: {}
+  open-webui-local-data: {}

@@ -1858,7 +1858,7 @@
 	"What's New in": "最近更新内容于",
 	"What's on your mind?": "聊聊您的想法吧！",
 	"When enabled, the model will respond to each chat message in real-time, generating a response as soon as the user sends a message. This mode is useful for live chat applications, but may impact performance on slower hardware.": "启用后，模型将实时回答每条对话信息，在用户发送信息后立即生成回答。这种模式适用于即时对话应用，但在性能较低的设备上可能会影响响应速度",
-	"wherever you are": "纵使身在远方，亦与世界同频",
+	"wherever you are": "穿越星际的数据，只为与你共鸣",
 	"Whether to paginate the output. Each page will be separated by a horizontal rule and page number. Defaults to False.": "是否对输出内容进行分页。每页之间将用水平分隔线和页码隔开。默认为关闭",
 	"Whisper (Local)": "Whisper (本地)",
 	"Who can share to this group": "允许谁可以分享到此组",
