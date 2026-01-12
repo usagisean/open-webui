@@ -1,4 +1,4 @@
-name: Build ZX AI Image
+name: Build & Deploy Nebula AI
 
 on:
   push:
@@ -13,6 +13,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # 第一阶段：构建并推送镜像
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
@@ -30,10 +31,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- 修复点：新增 Buildx 支持 ---
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      # ---------------------------
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -49,7 +48,34 @@ jobs:
         with:
           context: .
           push: true
+          # ✅ [Sean 优化] 明确指定构建架构。
+          # 大多数 VPS 是 linux/amd64。如果你 VPS 是 ARM 的，改成 linux/arm64
+          platforms: linux/amd64 
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # 第二阶段：指挥 VPS 自动更新 (可选，需要配置 Secrets)
+  deploy-to-vps:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_KEY }}
+          # 💡 下面是让 VPS 执行的命令
+          # 假设你的 docker-compose.yaml 在 /root/nebula-ai 目录下
+          script: |
+            cd /root/open-webui
+            # 登录 GHCR (如果镜像是私有的需要这一步，公开的可省略)
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # 拉取最新镜像
+            docker compose pull
+            # 重建并启动
+            docker compose up -d
+            # 清理旧镜像
+            docker image prune -f
