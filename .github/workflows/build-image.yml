@@ -74,6 +74,7 @@ jobs:
           target: "/root/open-webui/"
 
       # 2. 远程执行部署命令
+      # 2. 远程执行部署命令
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -81,11 +82,15 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_KEY }}
           port: ${{ secrets.VPS_PORT }}
+          
+          # ✅ [新增] 增加超时时间 (默认是 10m)
+          timeout: 30m
+          command_timeout: 30m
+          
           script: |
             cd /root/open-webui
             
             # 把上传上来的 prod.yml 重命名为标准的 docker-compose.yml
-            # 这会覆盖掉服务器上现有的文件，确保配置永远以代码库为准
             mv docker-compose.prod.yml docker-compose.yml
             
             # 登录 GHCR
