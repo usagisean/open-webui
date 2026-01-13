@@ -3,9 +3,15 @@ import uuid
 import time
 import datetime
 import logging
+import smtplib # 新增
+import os      # 新增
+import random  # 新增
+import string  # 新增
+from email.mime.text import MIMEText # 新增
+from email.header import Header      # 新增
+
 from aiohttp import ClientSession
 import urllib
-
 
 from open_webui.models.auths import (
     AddUserForm,
@@ -86,6 +92,57 @@ log = logging.getLogger(__name__)
 signin_rate_limiter = RateLimiter(
     redis_client=get_redis_client(), limit=5 * 3, window=60 * 3
 )
+# --- 放在 auths.py 的辅助函数区域 ---
+
+def validate_email_format(email: str) -> bool:
+    """
+    后端严格校验邮箱格式
+    """
+    # 这是一个比较通用的邮箱正则
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+def validate_password(password: str):
+    """
+    后端校验密码强度
+    """
+    if len(password) < 8:
+        raise Exception("密码长度不能少于 8 位")
+    # 如果需要强制包含数字和字母，取消下面注释
+    if not re.search(r"\d", password) or not re.search(r"[a-zA-Z]", password):
+         raise Exception("密码必须同时包含字母和数字")
+# ==========================================
+# 辅助函数: 发送邮件 (通用)
+# ==========================================
+def send_email_code(to_email: str, code: str, subject: str = "Verification Code"):
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_from = os.getenv("SMTP_FROM", smtp_user)
+    
+    if not smtp_host or not smtp_user:
+        log.error("SMTP not configured in .env, skipping email.")
+        return
+
+    msg = MIMEText(f"Your code is: {code}\nExpires in 10 minutes.", 'plain', 'utf-8')
+    msg['Subject'] = Header(subject, 'utf-8')
+    msg['From'] = smtp_from
+    msg['To'] = to_email
+
+    try:
+        # --- [Sean Fix] 区分 465 SSL 和其他端口 ---
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port)
+        else:
+            server = smtplib.SMTP(smtp_host, smtp_port)
+            server.starttls()
+            
+        with server:
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_from, [to_email], msg.as_string())
+    except Exception as e:
+        log.error(f"Failed to send email: {e}")
 
 ############################
 # GetSessionUser
@@ -693,9 +750,8 @@ async def signin(
 
 
 ############################
-# SignUp
+# SignUp (Modified)
 ############################
-
 
 @router.post("/signup", response_model=SessionUserResponse)
 async def signup(
@@ -704,101 +760,81 @@ async def signup(
     form_data: SignupForm,
     db: Session = Depends(get_session),
 ):
-    has_users = Users.has_users(db=db)
-
-    if WEBUI_AUTH:
-        if (
-            not request.app.state.config.ENABLE_SIGNUP
-            or not request.app.state.config.ENABLE_LOGIN_FORM
-        ):
-            if has_users or not ENABLE_INITIAL_ADMIN_SIGNUP:
-                raise HTTPException(
-                    status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.ACCESS_PROHIBITED
-                )
-    else:
-        if has_users:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.ACCESS_PROHIBITED
-            )
-
+    # 1. --- 🛡️ 第一道防线：格式校验 (最先执行) ---
+    # 校验邮箱格式
     if not validate_email_format(form_data.email.lower()):
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="邮箱格式不正确，请检查输入" # ERROR_MESSAGES.INVALID_EMAIL_FORMAT
         )
 
-    if Users.get_user_by_email(form_data.email.lower(), db=db):
-        raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
-
+    # 校验密码强度
     try:
-        try:
-            validate_password(form_data.password)
-        except Exception as e:
-            raise HTTPException(400, detail=str(e))
+        validate_password(form_data.password)
+    except Exception as e:
+        # 直接把具体的错误信息（如“长度不够”）返给前端
+        raise HTTPException(status_code=400, detail=str(e))
 
+    # 2. --- 逻辑准备 ---
+    email_lower = form_data.email.lower()
+    has_users = Users.has_users(db=db)
+    
+    # 3. --- 🛡️ 第二道防线：用户状态检查 ---
+    existing_user = Users.get_user_by_email(email_lower, db=db)
+
+    # 如果用户存在
+    if existing_user:
+        # 只有 Pending 状态允许被“覆盖/重新激活”
+        if existing_user.role == "pending":
+            hashed = get_password_hash(form_data.password)
+            Auths.update_user_password_by_id(existing_user.id, hashed, db=db)
+            Users.update_user_by_id(
+                existing_user.id, 
+                {"name": form_data.name, "profile_image_url": form_data.profile_image_url}, 
+                db=db
+            )
+            user = existing_user
+            role = "pending"
+        else:
+            # 既然是已存在的正式用户，直接报错，不允许重复注册
+            raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
+            
+    # 如果用户不存在，创建新用户
+    else:
         hashed = get_password_hash(form_data.password)
-
-        role = "admin" if not has_users else request.app.state.config.DEFAULT_USER_ROLE
+        # 第一个用户是 admin，后续都是 pending
+        role = "admin" if not has_users else "pending"
+        
         user = Auths.insert_new_auth(
-            form_data.email.lower(),
-            hashed,
-            form_data.name,
-            form_data.profile_image_url,
-            role,
-            db=db,
+            email_lower, hashed, form_data.name, form_data.profile_image_url, role, db=db,
         )
 
-        if user:
+    # 4. --- 业务逻辑：分流处理 ---
+    if user:
+        # Case A: Admin 直接给 Token 登录
+        if role == "admin":
             expires_delta = parse_duration(request.app.state.config.JWT_EXPIRES_IN)
-            expires_at = None
-            if expires_delta:
-                expires_at = int(time.time()) + int(expires_delta.total_seconds())
-
-            token = create_token(
-                data={"id": user.id},
-                expires_delta=expires_delta,
-            )
-
-            datetime_expires_at = (
-                datetime.datetime.fromtimestamp(expires_at, datetime.timezone.utc)
-                if expires_at
-                else None
-            )
-
-            # Set the cookie token
+            expires_at = int(time.time()) + int(expires_delta.total_seconds()) if expires_delta else None
+            
+            token = create_token(data={"id": user.id}, expires_delta=expires_delta)
+            
+            # 设置 Cookie
             response.set_cookie(
                 key="token",
                 value=token,
-                expires=datetime_expires_at,
-                httponly=True,  # Ensures the cookie is not accessible via JavaScript
+                expires=datetime.datetime.fromtimestamp(expires_at, datetime.timezone.utc) if expires_at else None,
+                httponly=True,
                 samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
                 secure=WEBUI_AUTH_COOKIE_SECURE,
             )
 
-            if request.app.state.config.WEBHOOK_URL:
-                await post_webhook(
-                    request.app.state.WEBUI_NAME,
-                    request.app.state.config.WEBHOOK_URL,
-                    WEBHOOK_MESSAGES.USER_SIGNUP(user.name),
-                    {
-                        "action": "signup",
-                        "message": WEBHOOK_MESSAGES.USER_SIGNUP(user.name),
-                        "user": user.model_dump_json(exclude_none=True),
-                    },
-                )
-
-            user_permissions = get_permissions(
-                user.id, request.app.state.config.USER_PERMISSIONS, db=db
-            )
-
+            # 自动应用权限和组
             if not has_users:
-                # Disable signup after the first user is created
-                request.app.state.config.ENABLE_SIGNUP = False
+                 # 创建完第一个管理员后，可以在内存里把注册关了（可选）
+                 request.app.state.config.ENABLE_SIGNUP = False
 
-            apply_default_group_assignment(
-                request.app.state.config.DEFAULT_GROUP_ID,
-                user.id,
-                db=db,
-            )
+            user_permissions = get_permissions(user.id, request.app.state.config.USER_PERMISSIONS, db=db)
+            apply_default_group_assignment(request.app.state.config.DEFAULT_GROUP_ID, user.id, db=db)
 
             return {
                 "token": token,
@@ -811,11 +847,39 @@ async def signup(
                 "profile_image_url": user.profile_image_url,
                 "permissions": user_permissions,
             }
+
+        # Case B: 普通用户，进入 Pending 验证流程
         else:
-            raise HTTPException(500, detail=ERROR_MESSAGES.CREATE_USER_ERROR)
-    except Exception as err:
-        log.error(f"Signup error: {str(err)}")
-        raise HTTPException(500, detail="An internal error occurred during signup.")
+            # 生成 6 位数字验证码
+            code = ''.join(random.choices(string.digits, k=6))
+            
+            # 存入 Redis (10分钟有效期)
+            # 这里的 get_redis_client 确保你前面 import 了，或者用 request.app.state.redis
+            try:
+                redis_client = get_redis_client()
+                # 关键：加上 print 方便你在终端调试看验证码，避免发邮件失败不知道码是多少
+                print(f"DEBUG: Email={user.email}, Code={code}") 
+                redis_client.setex(f"verification:{user.email.lower()}", 600, code)
+            except Exception as e:
+                log.error(f"Redis error: {e}")
+                raise HTTPException(500, detail="验证服务暂不可用(Redis连接失败)")
+
+            # 发送邮件 (如果配置了)
+            # 建议加个 try-except 避免邮件发不出去导致前端崩了
+            try:
+                send_email_code(user.email, code, "Verify your account")
+            except Exception as e:
+                log.error(f"Email send error: {e}")
+                # 这里不报错，因为你可以在终端看到验证码，或者假设 Redis 已经存了
+
+            # 抛出 401 给前端，前端捕获后弹出验证码输入框
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="VERIFICATION_REQUIRED"
+            )
+
+    else:
+        raise HTTPException(500, detail=ERROR_MESSAGES.CREATE_USER_ERROR)
 
 
 @router.get("/signout")
@@ -1283,3 +1347,121 @@ async def get_api_key(
         }
     else:
         raise HTTPException(404, detail=ERROR_MESSAGES.API_KEY_NOT_FOUND)
+
+############################
+# Verification & Reset Password (NEW)
+############################
+
+class VerifyEmailForm(BaseModel):
+    email: str
+    code: str
+
+@router.post("/verify")
+async def verify_email(
+    request: Request, # 增加 request 参数以读取配置
+    form_data: VerifyEmailForm,
+    db: Session = Depends(get_session)
+):
+    redis_client = get_redis_client()
+    key = f"verification:{form_data.email.lower()}"
+    stored_code = redis_client.get(key)
+    
+    if stored_code is None:
+        raise HTTPException(status_code=400, detail="验证码已过期或不存在")
+    
+    if isinstance(stored_code, bytes):
+         stored_code = stored_code.decode('utf-8')
+
+    if stored_code != form_data.code:
+        raise HTTPException(status_code=400, detail="验证码错误")
+
+    user = Users.get_user_by_email(form_data.email.lower(), db=db)
+    if not user:
+        raise HTTPException(404, detail="User not found.")
+
+    # [优化] 获取系统配置的默认角色，而不是硬编码 "user"
+    default_role = request.app.state.config.DEFAULT_USER_ROLE
+    # 防止默认角色也是 pending 导致死循环，如果默认是 pending，强制转为 user
+    if default_role == "pending":
+        default_role = "user"
+
+    # 验证成功：pending -> 正式角色
+    Users.update_user_role_by_id(user.id, default_role, db=db)
+    redis_client.delete(key)
+    
+    # 自动登录
+    token = create_token(data={"id": user.id})
+    
+    # [新增] 返回权限信息，前端可能需要
+    user_permissions = get_permissions(
+        user.id, request.app.state.config.USER_PERMISSIONS, db=db
+    )
+
+    return {
+        "token": token,
+        "token_type": "Bearer",
+        "detail": "Email verified successfully",
+        "role": default_role,
+        "permissions": user_permissions
+    }
+
+# --- 找回密码：发送验证码 ---
+class ForgotPasswordForm(BaseModel):
+    email: str
+
+@router.post("/password/reset/code")
+async def forgot_password_code(
+    form_data: ForgotPasswordForm,
+    db: Session = Depends(get_session)
+):
+    user = Users.get_user_by_email(form_data.email.lower(), db=db)
+    if not user:
+        # 为了安全，不要提示“用户不存在”，可以提示“如果邮箱存在则已发送”
+        # 但如果是内部系统，直接提示不存在也行。这里我们实诚点。
+        raise HTTPException(404, detail="User not found.")
+
+    code = ''.join(random.choices(string.digits, k=6))
+    redis_client = get_redis_client()
+    # 存入 Redis: reset:{email}，区别于注册的 verification
+    redis_client.setex(f"reset:{user.email.lower()}", 600, code)
+    
+    send_email_code(user.email, code, "Reset Password Code")
+    return {"message": "Verification code sent"}
+
+# --- 找回密码：验证并重置 ---
+class ResetPasswordForm(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+@router.post("/password/reset/verify")
+async def reset_password_verify(
+    form_data: ResetPasswordForm,
+    db: Session = Depends(get_session)
+):
+    redis_client = get_redis_client()
+    key = f"reset:{form_data.email.lower()}"
+    stored_code = redis_client.get(key)
+    
+    if not stored_code:
+        raise HTTPException(400, detail="Code expired or not found.")
+    
+    if isinstance(stored_code, bytes):
+        stored_code = stored_code.decode('utf-8')
+    if stored_code != form_data.code:
+        raise HTTPException(400, detail="Invalid code.")
+        
+    user = Users.get_user_by_email(form_data.email.lower(), db=db)
+    if not user:
+        raise HTTPException(404, detail="User not found.")
+        
+    # 重置密码
+    try:
+        validate_password(form_data.new_password)
+        hashed = get_password_hash(form_data.new_password)
+        Auths.update_user_password_by_id(user.id, hashed, db=db)
+        
+        redis_client.delete(key)
+        return {"message": "Password reset successfully"}
+    except Exception as e:
+        raise HTTPException(400, detail=str(e))

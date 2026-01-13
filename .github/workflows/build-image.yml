@@ -13,7 +13,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # 第一阶段：构建并推送镜像
+  # --- 第一阶段：构建 (保持不变) ---
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
@@ -34,7 +34,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -48,35 +48,54 @@ jobs:
         with:
           context: .
           push: true
-          # ✅ [Sean 优化] 明确指定构建架构。
-          # 大多数 VPS 是 linux/amd64。如果你 VPS 是 ARM 的，改成 linux/arm64
-          platforms: linux/amd64 
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # 第二阶段：指挥 VPS 自动更新 (可选，需要配置 Secrets)
+  # --- 第二阶段：部署 (已更新) ---
   deploy-to-vps:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to VPS via SSH
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 1. 上传生产专用文件 docker-compose.prod.yml
+      - name: Copy production compose file via SSH
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          source: "docker-compose.prod.yml"
+          target: "/root/open-webui/"
+
+      # 2. 远程执行部署命令
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_KEY }}
           port: ${{ secrets.VPS_PORT }}
-          # 💡 下面是让 VPS 执行的命令
-          # 假设你的 docker-compose.yaml 在 /root/nebula-ai 目录下
           script: |
             cd /root/open-webui
-            # 登录 GHCR (如果镜像是私有的需要这一步，公开的可省略)
+            
+            # 把上传上来的 prod.yml 重命名为标准的 docker-compose.yml
+            # 这会覆盖掉服务器上现有的文件，确保配置永远以代码库为准
+            mv docker-compose.prod.yml docker-compose.yml
+            
+            # 登录 GHCR
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
             # 拉取最新镜像
             docker compose pull
-            # 重建并启动
+            
+            # 重启服务 (后台运行)
             docker compose up -d
+            
             # 清理旧镜像
             docker image prune -f

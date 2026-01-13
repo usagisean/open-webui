@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  open-webui:
+    # ⚠️ 请确认 usagisean 是你正确的 GitHub 用户名
+    image: ghcr.io/usagisean/open-webui:latest
+    container_name: open-webui
+    restart: always
+    ports:
+      - "3000:8080"
+    
+    # 读取服务器上的 .env
+    env_file:
+      - .env
+    
+    environment:
+      - WEBUI_NAME=Nebula AI
+    
+    volumes:
+      - open-webui:/app/backend/data
+    
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: always
+    volumes:
+      - redis-data:/data
+    command: redis-server --save 60 1 --loglevel warning
+
+  # 如果你确实在用 new-api，保留它；不用的话可以删掉下面这段
+  new-api:
+    image: ghcr.io/usagisean/new-api:latest
+    container_name: new-api
+    restart: always
+    ports:
+      - "3001:3000"
+    volumes:
+      - new-api-data:/data
+    environment:
+      - TZ=Asia/Shanghai
+    depends_on:
+      - open-webui
+
+volumes:
+  open-webui:
+  new-api-data:
+  redis-data:

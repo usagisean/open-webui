@@ -2,39 +2,44 @@ version: '3.8'
 
 services:
   open-webui:
-    # ✅ 核心配置：告诉 Docker 用当前目录 (.) 的代码来构建
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        # 这个参数只是构建时需要，运行不需要本地 Ollama
         OLLAMA_BASE_URL: '/ollama'
-
-    # ✅ 给本地镜像起个特殊名字，避免和官方镜像混淆
     image: open-webui:local-dev-zxai
-
     container_name: open-webui
     
-    # 数据卷：改为 local-data，给你一个干净的本地测试环境
+    # ✅ 核心修复 1：加载你的环境变量文件
+    env_file:
+      - .env
+
     volumes:
       - open-webui-local-data:/app/backend/data
-
-    # 端口映射：访问 localhost:3000
     ports:
       - "3000:8080"
-
+    
     environment:
       - 'WEBUI_SECRET_KEY=dev_secret_key'
-      # 因为删除了 ollama 服务，这里不需要配 OLLAMA_BASE_URL
-      # 如果你想在本地测试聊天，可以在这里填你的 NewAPI 地址，不填也能启动 UI
-      # - OPENAI_API_BASE_URL=http://your-vps-ip:3001/v1
-      # - OPENAI_API_KEY=your-key
+      # ✅ 核心修复 2：告诉后端 Redis 在哪（容器间通信用服务名）
+      - 'REDIS_URL=redis://redis:6379/0'
+      # 确保这个开关打开，否则按钮不显示
+      - 'ENABLE_OAUTH_SIGNUP=True'
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
+    
+    # ✅ 核心修复 3：确保 Redis 启动了后端再启动
+    depends_on:
+      - redis
     restart: unless-stopped
 
-# 定义卷
+  # ✅ 必须加个 Redis，不然验证码没地方存
+  redis:
+    image: redis:alpine
+    container_name: redis
+    expose:
+      - "6379"
+
 volumes:
   open-webui-local-data: {}
