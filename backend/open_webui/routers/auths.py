@@ -1358,7 +1358,7 @@ class VerifyEmailForm(BaseModel):
 
 @router.post("/verify")
 async def verify_email(
-    request: Request, # 增加 request 参数以读取配置
+    request: Request, 
     form_data: VerifyEmailForm,
     db: Session = Depends(get_session)
 ):
@@ -1379,32 +1379,24 @@ async def verify_email(
     if not user:
         raise HTTPException(404, detail="User not found.")
 
-    # [优化] 获取系统配置的默认角色，而不是硬编码 "user"
     default_role = request.app.state.config.DEFAULT_USER_ROLE
-    # 防止默认角色也是 pending 导致死循环，如果默认是 pending，强制转为 user
     if default_role == "pending":
         default_role = "user"
 
-    # 验证成功：pending -> 正式角色
+    # 验证成功：更新角色
     Users.update_user_role_by_id(user.id, default_role, db=db)
     redis_client.delete(key)
     
-    # 自动登录
-    token = create_token(data={"id": user.id})
+    # ---------------- 改动开始 ----------------
+    # Sean: 这里我们不再生成 Token，也不自动登录
+    # token = create_token(data={"id": user.id}) 
+    # user_permissions = ...
     
-    # [新增] 返回权限信息，前端可能需要
-    user_permissions = get_permissions(
-        user.id, request.app.state.config.USER_PERMISSIONS, db=db
-    )
-
     return {
-        "token": token,
-        "token_type": "Bearer",
-        "detail": "Email verified successfully",
-        "role": default_role,
-        "permissions": user_permissions
+        "status": True,
+        "detail": "Email verified successfully. Please login."
     }
-
+    # ---------------- 改动结束 ----------------
 # --- 找回密码：发送验证码 ---
 class ForgotPasswordForm(BaseModel):
     email: str
