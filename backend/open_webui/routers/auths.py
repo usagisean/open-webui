@@ -7,9 +7,10 @@ import smtplib # 新增
 import os      # 新增
 import random  # 新增
 import string  # 新增
-from email.mime.text import MIMEText # 新增
-from email.header import Header      # 新增
-
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.header import Header
+log = logging.getLogger(__name__)
 from aiohttp import ClientSession
 import urllib
 
@@ -112,7 +113,10 @@ def validate_password(password: str):
     if not re.search(r"\d", password) or not re.search(r"[a-zA-Z]", password):
          raise Exception("密码必须同时包含字母和数字")
 # ==========================================
-# 辅助函数: 发送邮件 (通用)
+# 辅助函数: 发送邮件 (HTML 高级版 - Deep Nebula Theme)
+# ==========================================
+# ==========================================
+# 辅助函数: 发送邮件 (智能通用版 - 支持注册 & 找回密码)
 # ==========================================
 def send_email_code(to_email: str, code: str, subject: str = "Verification Code"):
     smtp_host = os.getenv("SMTP_HOST")
@@ -125,13 +129,91 @@ def send_email_code(to_email: str, code: str, subject: str = "Verification Code"
         log.error("SMTP not configured in .env, skipping email.")
         return
 
-    msg = MIMEText(f"Your code is: {code}\nExpires in 10 minutes.", 'plain', 'utf-8')
+    # --- 1. 智能判断场景 (基于标题) ---
+    # 如果标题里包含 "reset" (不区分大小写)，就认为是找回密码邮件
+    is_reset = "reset" in subject.lower()
+
+    if is_reset:
+        title_text = "Reset Password"
+        desc_text = "We received a request to reset your password.<br>Enter the code below to proceed."
+        plain_desc = "We received a request to reset your password."
+    else:
+        title_text = "Verify Your Identity"
+        desc_text = "Welcome to Nebula AI.<br>Use the code below to complete your sign in."
+        plain_desc = "Welcome to Nebula AI. Use the code below to complete your sign in."
+
+    # --- 2. 组装邮件对象 ---
+    msg = MIMEMultipart("alternative")
     msg['Subject'] = Header(subject, 'utf-8')
     msg['From'] = smtp_from
     msg['To'] = to_email
 
+    # --- 3. 纯文本回退 (Plain Text Fallback) ---
+    text_content = f"{title_text}\n\n{plain_desc}\n\nYour code: {code}\n\nExpires in 10 minutes."
+
+    # --- 4. HTML 模版 (Deep Nebula Dark Mode) ---
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ margin: 0; padding: 0; min-width: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #000000; }}
+            .email-wrapper {{ background-color: #000000; padding: 40px 20px; }}
+            .email-card {{ max-width: 480px; margin: 0 auto; background-color: #09090b; border: 1px solid #27272a; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 30px rgba(139, 92, 246, 0.15); }}
+            
+            .email-header {{ background-color: #09090b; padding: 35px 40px; text-align: center; border-bottom: 1px solid #1f1f22; }}
+            /* 品牌名增加了一点紫色辉光 */
+            .brand-text {{ color: #ffffff; font-size: 26px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; margin: 0; text-shadow: 0 0 15px rgba(139, 92, 246, 0.4); }}
+            
+            .email-body {{ padding: 40px 30px; text-align: center; color: #e4e4e7; }}
+            .title {{ margin-top: 0; font-size: 22px; color: #ffffff; font-weight: 600; }}
+            .desc {{ color: #a1a1aa; font-size: 15px; line-height: 1.6; margin-bottom: 30px; }}
+            
+            .code-box {{ background-color: rgba(139, 92, 246, 0.08); border: 1px dashed #7c3aed; border-radius: 12px; padding: 15px 0; margin: 0 auto 30px auto; width: 80%; }}
+            .verification-code {{ font-family: 'Courier New', monospace; font-size: 32px; font-weight: 700; color: #a78bfa; letter-spacing: 6px; display: block; }}
+            
+            .footer {{ padding: 25px; text-align: center; color: #52525b; font-size: 12px; background-color: #050505; border-top: 1px solid #18181b; }}
+            a {{ color: #8b5cf6; text-decoration: none; }}
+        </style>
+    </head>
+    <body>
+        <div class="email-wrapper">
+            <div class="email-card">
+                <div class="email-header">
+                    <h1 class="brand-text">NEBULA AI</h1>
+                </div>
+                
+                <div class="email-body">
+                    <h2 class="title">{title_text}</h2>
+                    <p class="desc">{desc_text}</p>
+                    
+                    <div class="code-box">
+                        <span class="verification-code">{code}</span>
+                    </div>
+                    
+                    <p style="color: #52525b; font-size: 13px; margin: 0;">
+                        This code will expire in 10 minutes.<br>
+                        If you didn't request this, please ignore this email.
+                    </p>
+                </div>
+                
+                <div class="footer">
+                    <p>&copy; 2026 Nebula AI. The Hub of Minds.</p>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    # --- 5. 发送 ---
+    part1 = MIMEText(text_content, 'plain')
+    part2 = MIMEText(html_content, 'html')
+    msg.attach(part1)
+    msg.attach(part2)
+
     try:
-        # --- [Sean Fix] 区分 465 SSL 和其他端口 ---
         if smtp_port == 465:
             server = smtplib.SMTP_SSL(smtp_host, smtp_port)
         else:
@@ -141,9 +223,9 @@ def send_email_code(to_email: str, code: str, subject: str = "Verification Code"
         with server:
             server.login(smtp_user, smtp_password)
             server.sendmail(smtp_from, [to_email], msg.as_string())
+            log.info(f"Email sent to {to_email} (Subject: {subject})")
     except Exception as e:
         log.error(f"Failed to send email: {e}")
-
 ############################
 # GetSessionUser
 ############################

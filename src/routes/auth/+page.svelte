@@ -1,91 +1,85 @@
 <script lang="ts">
-	import DOMPurify from 'dompurify';
-	import { marked } from 'marked';
-	import { toast } from 'svelte-sonner';
-	import { onMount, getContext, tick } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
-	import { getBackendConfig } from '$lib/apis';
-	import { ldapUserSignIn, getSessionUser, userSignIn, updateUserTimezone } from '$lib/apis/auths';
-	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
-	import { WEBUI_NAME, config, user, socket } from '$lib/stores';
-	import { generateInitialsImage, getUserTimezone } from '$lib/utils';
-	import Spinner from '$lib/components/common/Spinner.svelte';
-	import OnBoarding from '$lib/components/OnBoarding.svelte';
-	import SensitiveInput from '$lib/components/common/SensitiveInput.svelte'; // 确保引入
+    import DOMPurify from 'dompurify';
+    import { marked } from 'marked';
+    import { toast } from 'svelte-sonner';
+    import { onMount, getContext, tick } from 'svelte';
+    import { goto } from '$app/navigation';
+    import { page } from '$app/stores';
+    import { getBackendConfig } from '$lib/apis';
+    import { ldapUserSignIn, getSessionUser, userSignIn, updateUserTimezone } from '$lib/apis/auths';
+    import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+    import { WEBUI_NAME, config, user, socket } from '$lib/stores';
+    import { generateInitialsImage, getUserTimezone } from '$lib/utils';
+    import Spinner from '$lib/components/common/Spinner.svelte';
+    import OnBoarding from '$lib/components/OnBoarding.svelte';
+    import SensitiveInput from '$lib/components/common/SensitiveInput.svelte';
 
-	const i18n = getContext('i18n');
+    const i18n = getContext('i18n');
 
-	let loaded = false;
-	let mode = $config?.features.enable_ldap ? 'ldap' : 'signin'; 
-	
-	let name = '';
-	let email = '';
-	let password = '';
-	let confirmPassword = '';
-	let ldapUsername = '';
+    let loaded = false;
+    let mode = $config?.features.enable_ldap ? 'ldap' : 'signin'; 
+    
+    let name = '';
+    let email = '';
+    let password = '';
+    let confirmPassword = '';
+    let ldapUsername = '';
 
-	// --- 验证码状态 ---
-	let countdown = 0;
-	let timer: any = null;
-	let verificationCode = '';
-	let showVerificationInput = false;
+    // --- 验证码状态 ---
+    let countdown = 0;
+    let timer: any = null;
+    let verificationCode = '';
+    let showVerificationInput = false;
     let isVerificationLoading = false;
 
-	// 密码显示状态
-	let showPassword = false;
+    // 密码显示状态
+    let showPassword = false;
     let showConfirmPassword = false;
 
-	const setSessionUser = async (sessionUser, redirectPath: string | null = null) => {
-		if (sessionUser) {
-			if (sessionUser.role === 'pending') return;
-			toast.success($i18n.t(`You're now logged in.`));
-			if (sessionUser.token) localStorage.token = sessionUser.token;
-			$socket.emit('user-join', { auth: { token: sessionUser.token } });
-			await user.set(sessionUser);
-			await config.set(await getBackendConfig());
+    const setSessionUser = async (sessionUser, redirectPath: string | null = null) => {
+        if (sessionUser) {
+            if (sessionUser.role === 'pending') return;
+            toast.success($i18n.t(`You're now logged in.`));
+            if (sessionUser.token) localStorage.token = sessionUser.token;
+            $socket.emit('user-join', { auth: { token: sessionUser.token } });
+            await user.set(sessionUser);
+            await config.set(await getBackendConfig());
 
-			const timezone = getUserTimezone();
-			if (sessionUser.token && timezone) updateUserTimezone(sessionUser.token, timezone);
+            const timezone = getUserTimezone();
+            if (sessionUser.token && timezone) updateUserTimezone(sessionUser.token, timezone);
 
-			if (!redirectPath) redirectPath = $page.url.searchParams.get('redirect') || '/';
-			goto(redirectPath);
-			localStorage.removeItem('redirectPath');
-		}
-	};
+            if (!redirectPath) redirectPath = $page.url.searchParams.get('redirect') || '/';
+            goto(redirectPath);
+            localStorage.removeItem('redirectPath');
+        }
+    };
 
-	const startCountdown = () => {
-		countdown = 60;
-		if (timer) clearInterval(timer);
-		timer = setInterval(() => {
-			countdown -= 1;
-			if (countdown <= 0) {
-				clearInterval(timer);
-				countdown = 0;
-			}
-		}, 1000);
-	};
+    const startCountdown = () => {
+        countdown = 60;
+        if (timer) clearInterval(timer);
+        timer = setInterval(() => {
+            countdown -= 1;
+            if (countdown <= 0) {
+                clearInterval(timer);
+                countdown = 0;
+            }
+        }, 1000);
+    };
 
-	const sendVerificationCode = async () => {
-        // --- 1. 邮箱格式校验 (正则) ---
+    const sendVerificationCode = async () => {
         const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
         if (!email || !emailPattern.test(email)) {
             toast.error($i18n.t('Please enter a valid email address.'));
             return;
         }
-
-        // --- 2. 密码一致性校验 ---
         if (password !== confirmPassword) {
             toast.error($i18n.t('Passwords do not match.'));
             return;
         }
-
-        // --- 3. 密码强度校验 (已修改为 8 位) ---
         if (password.length < 8) {
             toast.error('Password must be at least 8 characters.');
             return;
         }
-        // 强制密码必须包含字母和数字
         const complexityPattern = /^(?=.*[A-Za-z])(?=.*\d)/;
         if (!complexityPattern.test(password)) {
              toast.error('Password must contain both letters and numbers.');
@@ -93,41 +87,39 @@
         }
         isVerificationLoading = true;
 
-		try {
-            // 注意：这里调用 signup 接口。如果后端返回 403 Forbidden，说明 ENABLE_SIGNUP=False
-			const res = await fetch(`${WEBUI_API_BASE_URL}/auths/signup`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					name: name || email.split('@')[0],
-					email: email,
-					password: password,
-					profile_image_url: generateInitialsImage(name || email)
-				})
-			});
+        try {
+            const res = await fetch(`${WEBUI_API_BASE_URL}/auths/signup`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: name || email.split('@')[0],
+                    email: email,
+                    password: password,
+                    profile_image_url: generateInitialsImage(name || email)
+                })
+            });
 
-			const data = await res.json();
+            const data = await res.json();
 
-			if (res.status === 401 && data.detail === 'VERIFICATION_REQUIRED') {
-				toast.success($i18n.t('Verification code sent to your email.'));
-				showVerificationInput = true;
-				startCountdown();
-			} else if (!res.ok) {
-                // 处理后端报错
+            if (res.status === 401 && data.detail === 'VERIFICATION_REQUIRED') {
+                toast.success($i18n.t('Verification code sent to your email.'));
+                showVerificationInput = true;
+                startCountdown();
+            } else if (!res.ok) {
                 if (res.status === 403) {
-                    toast.error("Registration is disabled by administrator (ENABLE_SIGNUP=False).");
+                    toast.error("Registration is disabled by administrator.");
                 } else {
-				    throw data.detail;
+                    throw data.detail;
                 }
-			} else {
-				await setSessionUser(data);
-			}
-		} catch (error) {
-			toast.error(`${error}`);
-		} finally {
+            } else {
+                await setSessionUser(data);
+            }
+        } catch (error) {
+            toast.error(`${error}`);
+        } finally {
             isVerificationLoading = false;
         }
-	};
+    };
 
     const completeSignUp = async () => {
         if (!verificationCode || verificationCode.length !== 6) {
@@ -151,28 +143,27 @@
         }
     };
 
-	const signInHandler = async () => {
-		const sessionUser = await userSignIn(email, password).catch((error) => {
-			toast.error(`${error}`);
-			return null;
-		});
-		await setSessionUser(sessionUser);
-	};
+    const signInHandler = async () => {
+        const sessionUser = await userSignIn(email, password).catch((error) => {
+            toast.error(`${error}`);
+            return null;
+        });
+        await setSessionUser(sessionUser);
+    };
 
-	const ldapSignInHandler = async () => {
-		const sessionUser = await ldapUserSignIn(ldapUsername, password).catch((error) => {
-			toast.error(`${error}`);
-			return null;
-		});
-		await setSessionUser(sessionUser);
-	};
+    const ldapSignInHandler = async () => {
+        const sessionUser = await ldapUserSignIn(ldapUsername, password).catch((error) => {
+            toast.error(`${error}`);
+            return null;
+        });
+        await setSessionUser(sessionUser);
+    };
 
-	const submitHandler = async () => {
-		if (mode === 'ldap') await ldapSignInHandler();
-		else if (mode === 'signin') await signInHandler();
-	};
+    const submitHandler = async () => {
+        if (mode === 'ldap') await ldapSignInHandler();
+        else if (mode === 'signin') await signInHandler();
+    };
 
-    // 找回密码
     let forgotStep = 1;
     let resetCode = '';
     let newPassword = '';
@@ -202,91 +193,99 @@
         } catch (e) { toast.error(`${e}`); }
     };
 
-	const oauthCallbackHandler = async () => {
-		function getCookie(name) {
-			const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1') + '=([^;]*)'));
-			return match ? decodeURIComponent(match[1]) : null;
-		}
-		const token = getCookie('token');
-		if (!token) return;
-		const sessionUser = await getSessionUser(token).catch((error) => { toast.error(`${error}`); return null; });
-		if (!sessionUser) return;
-		localStorage.token = token;
-		await setSessionUser(sessionUser, localStorage.getItem('redirectPath') || null);
-	};
+    const oauthCallbackHandler = async () => {
+        function getCookie(name) {
+            const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1') + '=([^;]*)'));
+            return match ? decodeURIComponent(match[1]) : null;
+        }
+        const token = getCookie('token');
+        if (!token) return;
+        const sessionUser = await getSessionUser(token).catch((error) => { toast.error(`${error}`); return null; });
+        if (!sessionUser) return;
+        localStorage.token = token;
+        await setSessionUser(sessionUser, localStorage.getItem('redirectPath') || null);
+    };
 
-	let onboarding = false;
-	onMount(async () => {
+    let onboarding = false;
+    onMount(async () => {
         showVerificationInput = false;
         countdown = 0;
-		const redirectPath = $page.url.searchParams.get('redirect');
-		if ($user !== undefined) goto(redirectPath || '/');
-		else if (redirectPath) localStorage.setItem('redirectPath', redirectPath);
+        const redirectPath = $page.url.searchParams.get('redirect');
+        if ($user !== undefined) goto(redirectPath || '/');
+        else if (redirectPath) localStorage.setItem('redirectPath', redirectPath);
 
-		const error = $page.url.searchParams.get('error');
-		if (error) toast.error(error);
+        const error = $page.url.searchParams.get('error');
+        if (error) toast.error(error);
 
-		await oauthCallbackHandler();
-		loaded = true;
-		if (($config?.features.auth_trusted_header ?? false) || $config?.features.auth === false) await signInHandler();
-		else onboarding = $config?.onboarding ?? false;
-	});
+        await oauthCallbackHandler();
+        loaded = true;
+        if (($config?.features.auth_trusted_header ?? false) || $config?.features.auth === false) await signInHandler();
+        else onboarding = $config?.onboarding ?? false;
+    });
 </script>
 
 <svelte:head>
-	<title>{`${$WEBUI_NAME}`}</title>
+    <title>{`${$WEBUI_NAME}`}</title>
 </svelte:head>
 
 <OnBoarding bind:show={onboarding} getStartedHandler={() => { onboarding = false; mode = 'signup'; }} />
 
-<div class="fixed inset-0 z-0 bg-[#050505] overflow-hidden">
-    <img src="/assets/images/earth.jpg" alt="Background" class="w-full h-full object-cover opacity-30 scale-105 pointer-events-none" />
-    <div class="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent"></div>
+<div class="fixed inset-0 z-0 bg-[#000000] overflow-hidden">
+    <div class="nebula-glow-bg nebula-glow-1"></div>
+    <div class="nebula-glow-bg nebula-glow-2"></div>
 </div>
 
 <div class="relative w-full min-h-screen flex z-10 text-white font-primary overflow-hidden">
-	<div class="w-full absolute top-0 left-0 right-0 h-8 drag-region z-50" />
+    <div class="w-full absolute top-0 left-0 right-0 h-8 drag-region z-50" />
 
-	{#if loaded}
-		<main class="w-full flex flex-col lg:flex-row min-h-screen items-center justify-center lg:justify-between">
+    {#if loaded}
+        <main class="w-full flex flex-col lg:flex-row min-h-screen items-center justify-center lg:justify-between relative">
             
-            <div class="hidden lg:flex flex-1 flex-col justify-center px-16 xl:px-24 space-y-8 h-full">
-				<div class="space-y-4">
-					<img src="/static/favicon.png" class="size-20 rounded-2xl shadow-2xl mb-8 ring-1 ring-white/10" alt="Logo" />
-					<h1 class="text-6xl font-black tracking-tighter leading-[1.1]">
-						Nebula AI <br/>
-						<span class="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-600">
-							The Hub of Minds.
-						</span>
-					</h1>
-					<p class="text-xl text-gray-400 max-w-lg leading-relaxed font-light">
-						{$i18n.t('Generate images, process documents, and chat with private models in one secure cloud.')}
-					</p>
-				</div>
-			</div>
-
-            <div class="flex-1 flex items-center justify-center p-4 w-full h-full">
-                <div class="w-full max-w-[420px] bg-[#09090b] border border-white/10 rounded-[1.5rem] shadow-2xl relative flex flex-col max-h-[90vh]">
+            <div class="hidden lg:flex flex-1 flex-col justify-center px-16 xl:px-24 space-y-8 h-full z-10 relative">
+                <div class="space-y-6">
+                    <h1 class="text-6xl font-black tracking-[0.1em] leading-none uppercase" 
+                        style="text-shadow: 0 0 40px rgba(139, 92, 246, 0.5);">
+                        Nebula AI
+                    </h1>
                     
-                    <div class="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-50 blur-sm pointer-events-none z-20"></div>
+                    <div class="w-24 h-1 bg-gradient-to-r from-purple-500 to-transparent"></div>
 
-                    <div class="px-8 pt-8 pb-4 text-center shrink-0 z-10 bg-[#09090b]">
-						<h2 class="text-2xl font-bold tracking-tight mb-1 text-white">
-							{#if mode === 'signup'}{$i18n.t('Create Account')}
-							{:else if mode === 'forgot'}{$i18n.t('Reset Password')}
-							{:else if mode === 'ldap'}{$i18n.t('LDAP Login')}
-							{:else}{$i18n.t('Welcome back')}
-							{/if}
-						</h2>
+                    <h2 class="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-400 to-white">
+                        The Hub of Minds.
+                    </h2>
+                    
+                    <p class="text-lg text-gray-400 max-w-lg leading-relaxed font-light tracking-wide">
+                        {$i18n.t('Generate images, process documents, and chat with private models in one secure cloud.')}
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex-1 flex items-center justify-center p-4 w-full h-full z-20">
+                <div class="w-full max-w-[400px] bg-[#09090b]/80 backdrop-blur-xl border border-white/5 rounded-[1.5rem] shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden">
+                    
+                    <div class="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-purple-500 to-transparent opacity-80"></div>
+
+                    <div class="lg:hidden pt-8 px-8 text-center">
+                        <h2 class="text-2xl font-black tracking-widest text-white uppercase">Nebula AI</h2>
+                    </div>
+
+                    <div class="px-8 pt-6 pb-2 text-center shrink-0 z-10">
+                        <h2 class="text-xl font-bold tracking-tight mb-1 text-white">
+                            {#if mode === 'signup'}{$i18n.t('Create Account')}
+                            {:else if mode === 'forgot'}{$i18n.t('Reset Password')}
+                            {:else if mode === 'ldap'}{$i18n.t('LDAP Login')}
+                            {:else}{$i18n.t('Welcome back')}
+                            {/if}
+                        </h2>
                         <p class="text-gray-500 text-xs">
                             {#if mode === 'signup'}Enter your details to get started.
                             {:else if mode === 'forgot'}We'll verify your email first.
                             {:else}Please enter your details to sign in.{/if}
                         </p>
-					</div>
+                    </div>
 
                     <div class="px-8 pb-8 overflow-y-auto custom-scrollbar flex-1">
-                        <form on:submit|preventDefault={submitHandler} class="flex flex-col space-y-3">
+                        <form on:submit|preventDefault={submitHandler} class="flex flex-col space-y-4 mt-4">
                             
                             {#if mode === 'signup'}
                                 <div>
@@ -312,7 +311,7 @@
                                     <div class="flex justify-between items-center mb-1 ml-1">
                                         <label for="password" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Password</label>
                                         {#if mode === 'signin' || mode === 'ldap'}
-                                            <button type="button" on:click={() => { mode = 'forgot'; forgotStep = 1; }} class="text-[10px] font-bold text-blue-500 hover:text-blue-400">FORGOT?</button>
+                                            <button type="button" on:click={() => { mode = 'forgot'; forgotStep = 1; }} class="text-[10px] font-bold text-purple-400 hover:text-purple-300 transition-colors">FORGOT?</button>
                                         {/if}
                                     </div>
                                     <div class="relative">
@@ -358,14 +357,14 @@
                                     {:else}
                                         <div class="animate-in fade-in slide-in-from-bottom-2">
                                             <div class="mb-2">
-                                                <input bind:value={verificationCode} type="text" maxlength="6" class="nebula-input text-center tracking-[0.5em] font-mono text-lg bg-white/10 border-blue-500/50" placeholder="000000" />
+                                                <input bind:value={verificationCode} type="text" maxlength="6" class="nebula-input text-center tracking-[0.5em] font-mono text-lg bg-white/10 border-purple-500/50" placeholder="000000" />
                                             </div>
                                             <div class="flex justify-between items-center text-[10px] px-1">
                                                 <span class="text-green-500">Sent to email</span>
                                                 {#if countdown > 0}
                                                     <span class="text-gray-500">Resend in {countdown}s</span>
                                                 {:else}
-                                                    <button type="button" class="text-blue-500 hover:underline font-bold" on:click={sendVerificationCode}>Resend</button>
+                                                    <button type="button" class="text-purple-400 hover:underline font-bold" on:click={sendVerificationCode}>Resend</button>
                                                 {/if}
                                             </div>
                                         </div>
@@ -398,9 +397,9 @@
                         </form>
 
                         {#if Object.keys($config?.oauth?.providers ?? {}).length > 0 && mode !== 'forgot' && !showVerificationInput}
-                            <div class="relative my-4">
-                                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
-                                <div class="relative flex justify-center text-[10px] uppercase font-bold tracking-widest"><span class="bg-[#09090b] px-2 text-gray-600">Or continue with</span></div>
+                            <div class="relative my-6">
+                                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/5"></div></div>
+                                <div class="relative flex justify-center text-[10px] uppercase font-bold tracking-widest"><span class="bg-[#0e0e11] px-2 text-gray-600">Or continue with</span></div>
                             </div>
 
                             <div class="grid grid-cols-1 gap-2">
@@ -425,94 +424,138 @@
                             </div>
                         {/if}
 
-                        <div class="mt-6 text-center text-xs">
+                        <div class="mt-8 text-center text-xs">
                             {#if mode === 'signin' || mode === 'ldap'}
                                 <span class="text-gray-500">Don't have an account? </span>
-                                <button class="text-white font-bold hover:underline" on:click={() => { mode = 'signup'; showVerificationInput = false; }}>Sign up</button>
+                                <button class="text-white font-bold hover:text-purple-400 transition-colors" on:click={() => { mode = 'signup'; showVerificationInput = false; }}>Sign up</button>
                             {:else if mode === 'signup'}
                                 <span class="text-gray-500">Already have an account? </span>
-                                <button class="text-white font-bold hover:underline" on:click={() => { mode = 'signin'; showVerificationInput = false; }}>Sign in</button>
+                                <button class="text-white font-bold hover:text-purple-400 transition-colors" on:click={() => { mode = 'signin'; showVerificationInput = false; }}>Sign in</button>
                             {:else}
-                                <button class="text-gray-500 hover:text-white" on:click={() => { mode = 'signin'; forgotStep = 1; }}>← Back to login</button>
+                                <button class="text-gray-500 hover:text-white transition-colors" on:click={() => { mode = 'signin'; forgotStep = 1; }}>← Back to login</button>
                             {/if}
                         </div>
-					</div>
-				</div>
-			</div>
-		</main>
-	{/if}
+                    </div>
+                </div>
+            </div>
+        </main>
+    {/if}
 </div>
 
 <style>
-    :global(body) { background-color: #050505; color: white; }
+    /* 全局背景色 */
+    :global(body) { background-color: #000000; color: white; }
     .drag-region { -webkit-app-region: drag; }
 
-    /* 滚动条美化 */
-    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+    /* 背景星云光晕定义 */
+    .nebula-glow-bg {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(80px); /* 大范围模糊 */
+        opacity: 0.6;
+        animation: breathe 8s infinite ease-in-out;
+    }
+    .nebula-glow-1 {
+        bottom: -20%;
+        left: -10%;
+        width: 80vw;
+        height: 80vw;
+        background: radial-gradient(circle, rgba(124, 58, 237, 0.25), transparent 70%); /* 紫色 */
+    }
+    .nebula-glow-2 {
+        top: -20%;
+        right: -10%;
+        width: 60vw;
+        height: 60vw;
+        background: radial-gradient(circle, rgba(59, 130, 246, 0.15), transparent 70%); /* 淡淡的蓝，增加层次 */
+        animation-delay: 4s; /* 错开呼吸时间 */
+    }
 
+    @keyframes breathe {
+        0%, 100% { transform: scale(1); opacity: 0.6; }
+        50% { transform: scale(1.1); opacity: 0.4; }
+    }
+
+    /* 滚动条美化 */
+    .custom-scrollbar::-webkit-scrollbar { width: 0px; } /* 隐藏滚动条让界面更极简 */
+
+    /* 输入框样式 - 增加紫色光晕 */
     .nebula-input {
         width: 100%;
-        background-color: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background-color: rgba(0, 0, 0, 0.3); /* 更深的背景 */
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 0.75rem;
-        padding: 0.75rem 1rem; /* 更紧凑的 padding: py-3 */
-        font-size: 0.875rem; /* text-sm */
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
         color: white;
-        transition: all 0.2s;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         outline: none;
     }
     .nebula-input:focus {
-        background-color: rgba(255, 255, 255, 0.08);
-        border-color: #3b82f6;
-        box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+        background-color: rgba(255, 255, 255, 0.05);
+        border-color: #8b5cf6; /* 紫色边框 */
+        box-shadow: 0 0 15px rgba(139, 92, 246, 0.15); /* 紫色辉光 */
     }
     .nebula-input:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    /* 主按钮 - 纯紫渐变 */
     .nebula-btn-primary {
         width: 100%;
-        background-color: white;
-        color: black;
-        font-weight: 800;
-        padding: 0.75rem;
-        border-radius: 0.75rem;
-        transition: all 0.2s;
-        font-size: 0.875rem;
-    }
-    .nebula-btn-primary:hover:not(:disabled) { transform: scale(0.98); background-color: #e5e5e5; }
-    .nebula-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-
-    .nebula-btn-secondary {
-        width: 100%;
-        background-color: rgba(255, 255, 255, 0.1);
+        background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
         color: white;
         font-weight: 700;
         padding: 0.75rem;
         border-radius: 0.75rem;
-        border: 1px solid rgba(255,255,255,0.05);
+        transition: all 0.3s;
+        font-size: 0.875rem;
+        letter-spacing: 0.05em;
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .nebula-btn-primary:hover:not(:disabled) { 
+        transform: translateY(-1px); 
+        box-shadow: 0 4px 20px rgba(124, 58, 237, 0.4); /* 悬停发光 */
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    }
+    .nebula-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* 次级按钮 */
+    .nebula-btn-secondary {
+        width: 100%;
+        background-color: transparent;
+        color: #d1d5db;
+        font-weight: 600;
+        padding: 0.75rem;
+        border-radius: 0.75rem;
+        border: 1px dashed rgba(255,255,255,0.15);
         transition: all 0.2s;
-        font-size: 0.75rem; /* text-xs */
+        font-size: 0.75rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
-    .nebula-btn-secondary:hover:not(:disabled) { background-color: rgba(255, 255, 255, 0.2); }
-    .nebula-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .nebula-btn-secondary:hover:not(:disabled) { 
+        border-color: #8b5cf6;
+        color: #8b5cf6;
+        background-color: rgba(139, 92, 246, 0.05);
+    }
 
+    /* OAuth 按钮 */
     .nebula-btn-oauth {
         display: flex;
         justify-content: center;
         align-items: center;
         width: 100%;
-        background-color: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background-color: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         color: #9ca3af;
         font-weight: 600;
-        font-size: 0.75rem;
-        padding: 0.6rem;
+        font-size: 0.8rem;
+        padding: 0.75rem;
         border-radius: 0.75rem;
         transition: all 0.2s;
     }
-    .nebula-btn-oauth:hover { background-color: rgba(255, 255, 255, 0.08); color: white; }
+    .nebula-btn-oauth:hover { 
+        background-color: rgba(255, 255, 255, 0.06); 
+        color: white; 
+        border-color: rgba(255,255,255,0.2);
+    }
 </style>

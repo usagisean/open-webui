@@ -1,245 +1,207 @@
 <!doctype html>
 <html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/png" href="/static/favicon.png" crossorigin="use-credentials" />
-		<link
-			rel="icon"
-			type="image/png"
-			href="/static/favicon-96x96.png"
-			sizes="96x96"
-			crossorigin="use-credentials"
-		/>
-		<link
-			rel="icon"
-			type="image/svg+xml"
-			href="/static/favicon.svg"
-			crossorigin="use-credentials"
-		/>
-		<link rel="shortcut icon" href="/static/favicon.ico" crossorigin="use-credentials" />
-		<link
-			rel="apple-touch-icon"
-			sizes="180x180"
-			href="/static/apple-touch-icon.png"
-			crossorigin="use-credentials"
-		/>
-		<link rel="manifest" href="/manifest.json" crossorigin="use-credentials" />
-		<meta
-			name="viewport"
-			content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
-		/>
-		<meta name="theme-color" content="#171717" />
-		<meta name="robots" content="noindex,nofollow" />
+    <head>
+        <meta charset="utf-8" />
+        <link rel="icon" type="image/png" href="/static/favicon.png" crossorigin="use-credentials" />
+        <link
+            rel="icon"
+            type="image/png"
+            href="/static/favicon-96x96.png"
+            sizes="96x96"
+            crossorigin="use-credentials"
+        />
+        <link
+            rel="icon"
+            type="image/svg+xml"
+            href="/static/favicon.svg"
+            crossorigin="use-credentials"
+        />
+        <link rel="shortcut icon" href="/static/favicon.ico" crossorigin="use-credentials" />
+        <link
+            rel="apple-touch-icon"
+            sizes="180x180"
+            href="/static/apple-touch-icon.png"
+            crossorigin="use-credentials"
+        />
+        <link rel="manifest" href="/manifest.json" crossorigin="use-credentials" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+        />
+        <meta name="theme-color" content="#171717" />
+        <meta name="robots" content="noindex,nofollow" />
 
-		<script src="/static/loader.js" defer crossorigin="use-credentials"></script>
-		<link rel="stylesheet" href="/static/custom.css" crossorigin="use-credentials" />
+        <script src="/static/loader.js" defer crossorigin="use-credentials"></script>
+        <link rel="stylesheet" href="/static/custom.css" crossorigin="use-credentials" />
 
-		<script>
-			function resizeIframe(obj) {
-				obj.style.height = obj.contentWindow.document.documentElement.scrollHeight + 'px';
-			}
-		</script>
+        <script>
+            function resizeIframe(obj) {
+                obj.style.height = obj.contentWindow.document.documentElement.scrollHeight + 'px';
+            }
+        </script>
 
-		<script>
-			// On page load or when changing themes, best to add inline in `head` to avoid FOUC
-			(() => {
-				const metaThemeColorTag = document.querySelector('meta[name="theme-color"]');
-				const prefersDarkTheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        <script>
+            // On page load or when changing themes
+            (() => {
+                const metaThemeColorTag = document.querySelector('meta[name="theme-color"]');
+                const prefersDarkTheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
 
-				if (!localStorage?.theme) {
-					localStorage.theme = 'system';
-				}
+                if (!localStorage?.theme) {
+                    localStorage.theme = 'system';
+                }
 
-				if (localStorage.theme === 'system') {
-					document.documentElement.classList.add(prefersDarkTheme ? 'dark' : 'light');
-					metaThemeColorTag.setAttribute('content', prefersDarkTheme ? '#171717' : '#ffffff');
-				} else if (localStorage.theme === 'oled-dark') {
-					document.documentElement.style.setProperty('--color-gray-800', '#101010');
-					document.documentElement.style.setProperty('--color-gray-850', '#050505');
-					document.documentElement.style.setProperty('--color-gray-900', '#000000');
-					document.documentElement.style.setProperty('--color-gray-950', '#000000');
-					document.documentElement.classList.add('dark');
-					metaThemeColorTag.setAttribute('content', '#000000');
-				} else if (localStorage.theme === 'light') {
-					document.documentElement.classList.add('light');
-					metaThemeColorTag.setAttribute('content', '#ffffff');
-				} else if (localStorage.theme === 'her') {
-					document.documentElement.classList.add('her');
-					metaThemeColorTag.setAttribute('content', '#983724');
-				} else {
-					document.documentElement.classList.add('dark');
-					metaThemeColorTag.setAttribute('content', '#171717');
-				}
+                if (localStorage.theme === 'system') {
+                    document.documentElement.classList.add(prefersDarkTheme ? 'dark' : 'light');
+                    metaThemeColorTag.setAttribute('content', prefersDarkTheme ? '#171717' : '#ffffff');
+                } else if (localStorage.theme === 'oled-dark') {
+                    document.documentElement.style.setProperty('--color-gray-800', '#101010');
+                    document.documentElement.style.setProperty('--color-gray-850', '#050505');
+                    document.documentElement.style.setProperty('--color-gray-900', '#000000');
+                    document.documentElement.style.setProperty('--color-gray-950', '#000000');
+                    document.documentElement.classList.add('dark');
+                    metaThemeColorTag.setAttribute('content', '#000000');
+                } else if (localStorage.theme === 'light') {
+                    document.documentElement.classList.add('light');
+                    metaThemeColorTag.setAttribute('content', '#ffffff');
+                } else if (localStorage.theme === 'her') {
+                    document.documentElement.classList.add('her');
+                    metaThemeColorTag.setAttribute('content', '#983724');
+                } else {
+                    document.documentElement.classList.add('dark');
+                    metaThemeColorTag.setAttribute('content', '#171717');
+                }
 
-				window.matchMedia('(prefers-color-scheme: dark)').addListener((e) => {
-					if (localStorage.theme === 'system') {
-						if (e.matches) {
-							document.documentElement.classList.add('dark');
-							document.documentElement.classList.remove('light');
-							metaThemeColorTag.setAttribute('content', '#171717');
-						} else {
-							document.documentElement.classList.add('light');
-							document.documentElement.classList.remove('dark');
-							metaThemeColorTag.setAttribute('content', '#ffffff');
-						}
-					}
-				});
-				const isDarkMode = document.documentElement.classList.contains('dark');
+                window.matchMedia('(prefers-color-scheme: dark)').addListener((e) => {
+                    if (localStorage.theme === 'system') {
+                        if (e.matches) {
+                            document.documentElement.classList.add('dark');
+                            document.documentElement.classList.remove('light');
+                            metaThemeColorTag.setAttribute('content', '#171717');
+                        } else {
+                            document.documentElement.classList.add('light');
+                            document.documentElement.classList.remove('dark');
+                            metaThemeColorTag.setAttribute('content', '#ffffff');
+                        }
+                    }
+                });
+                
+                // Sean: 同样注释掉这里，防止默认 Logo 干扰我们精心设计的星云
+                // const logo = document.createElement('img');
+                // logo.id = 'logo';
+                // ... (略去原代码)
+                // document.addEventListener('DOMContentLoaded', function () { ... });
+            })();
+        </script>
 
-				const logo = document.createElement('img');
-				logo.id = 'logo';
-				logo.style =
-					'position: absolute; width: auto; height: 6rem; top: 44%; left: 50%; transform: translateX(-50%); display:block;';
-				logo.src = isDarkMode ? '/static/splash.png' : '/static/splash.png';
+        <title>Nebula AI | Zixiang Digital</title>
 
-				document.addEventListener('DOMContentLoaded', function () {
-					const splash = document.getElementById('splash-screen');
-					if (document.documentElement.classList.contains('her')) {
-						return;
-					}
+        %sveltekit.head%
+    </head>
 
-					if (splash) splash.prepend(logo);
-				});
-			})();
-		</script>
+    <body data-sveltekit-preload-data="hover">
+        <div style="display: contents">%sveltekit.body%</div>
 
-		<title>Nebula AI | Zixiang Digital</title>
+        <div id="splash-screen">
+            <style>
+                #splash-screen {
+                    position: fixed;
+                    z-index: 9999;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background-color: #000000 !important; /* 纯黑底色，衬托光晕 */
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    overflow: hidden;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                }
 
-		%sveltekit.head%
-	</head>
+                /* 1. 紫色星云光晕 (背景层) */
+                .nebula-glow {
+                    position: absolute;
+                    width: 60vh;  /* 很大，占据屏幕大部分 */
+                    height: 60vh;
+                    /* 你的最爱：紫色光晕，调得稍微深邃一点，不刺眼 */
+                    background: radial-gradient(circle, rgba(139, 92, 246, 0.2) 0%, rgba(0, 0, 0, 0) 70%);
+                    border-radius: 50%;
+                    /* 强力模糊，制造空气感 */
+                    filter: blur(60px);
+                    /* 缓慢的呼吸动画 */
+                    animation: pulse-glow 6s infinite ease-in-out;
+                    z-index: 1;
+                    pointer-events: none; /* 让鼠标穿透 */
+                }
 
-	<body data-sveltekit-preload-data="hover">
-		<div style="display: contents">%sveltekit.body%</div>
+                /* 2. 核心品牌文字 (前景层) */
+                .brand-text {
+                    position: relative;
+                    z-index: 10;
+                    color: #ffffff;
+                    font-size: 1.5rem; /* 大小适中 */
+                    font-weight: 600;  /* 粗体 */
+                    letter-spacing: 0.25em; /* 极宽的字间距 -> 高级感的来源 */
+                    text-transform: uppercase;
+                    /* 文字本身也有轻微的透明度变化 */
+                    animation: text-breathe 3s ease-in-out infinite;
+                    /* 给文字加一点点阴影，保证在光晕上清晰可见 */
+                    text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+                }
 
-		<div
-			id="splash-screen"
-			style="position: fixed; z-index: 100; top: 0; left: 0; width: 100%; height: 100%"
-		>
-			<style type="text/css" nonce="">
-				html {
-					overflow-y: scroll !important;
-				}
-			</style>
+                /* 3. (可选) 下方的一行小字，增加科技细节 */
+                .loading-line {
+                    position: relative;
+                    z-index: 10;
+                    width: 40px;
+                    height: 2px;
+                    background: rgba(255,255,255,0.3);
+                    margin-top: 20px;
+                    border-radius: 2px;
+                    overflow: hidden;
+                }
+                .loading-line::after {
+                    content: '';
+                    display: block;
+                    width: 100%;
+                    height: 100%;
+                    background: #fff;
+                    transform: translateX(-100%);
+                    animation: loading-slide 2s infinite ease-in-out;
+                }
 
-			<div
-				style="
-					position: absolute;
-					top: 33%;
-					left: 50%;
+                /* 动画定义区 */
+                @keyframes pulse-glow {
+                    0% { transform: scale(1); opacity: 0.4; }
+                    50% { transform: scale(1.2); opacity: 0.7; } /* 变大变亮 */
+                    100% { transform: scale(1); opacity: 0.4; }
+                }
 
-					width: 24rem;
-					transform: translateX(-50%);
+                @keyframes text-breathe {
+                    0% { opacity: 0.8; }
+                    50% { opacity: 1; }
+                    100% { opacity: 0.8; }
+                }
 
-					display: flex;
-					flex-direction: column;
-					align-items: center;
-				"
-			>
-				<img
-					id="logo-her"
-					style="width: auto; height: 13rem"
-					src="/static/splash.png"
-					class="animate-pulse-fast"
-				/>
+                @keyframes loading-slide {
+                    0% { transform: translateX(-100%); }
+                    50% { transform: translateX(100%); }
+                    100% { transform: translateX(100%); }
+                }
 
-				<div style="position: relative; width: 24rem; margin-top: 0.5rem">
-					<div
-						id="progress-background"
-						style="
-							position: absolute;
-							width: 100%;
-							height: 0.75rem;
+                /* 锁住滚动 */
+                html {
+                    overflow-y: hidden !important; 
+                    overscroll-behavior-y: none;
+                }
+            </style>
 
-							border-radius: 9999px;
-							background-color: #fafafa9a;
-						"
-					></div>
-
-					<div
-						id="progress-bar"
-						style="
-							position: absolute;
-							width: 0%;
-							height: 0.75rem;
-							border-radius: 9999px;
-							background-color: #fff;
-						"
-						class="bg-white"
-					></div>
-				</div>
-			</div>
-
-			<!-- <span style="position: absolute; bottom: 32px; left: 50%; margin: -36px 0 0 -36px">
-				Footer content
-			</span> -->
-		</div>
-	</body>
-
-	<style type="text/css" nonce="">
-		html {
-			overflow-y: hidden !important;
-			overscroll-behavior-y: none;
-		}
-
-		#splash-screen {
-			background: #fff;
-		}
-
-		html.dark #splash-screen {
-			background: #000;
-		}
-
-		html.her #splash-screen {
-			background: #983724;
-		}
-
-		#logo-her {
-			display: none;
-		}
-
-		#progress-background {
-			display: none;
-		}
-
-		#progress-bar {
-			display: none;
-		}
-
-		html.her #logo {
-			display: none;
-		}
-
-		html.her #logo-her {
-			display: block;
-			filter: invert(1);
-		}
-
-		html.her #progress-background {
-			display: block;
-		}
-
-		html.her #progress-bar {
-			display: block;
-		}
-
-		@media (max-width: 24rem) {
-			html.her #progress-background {
-				display: none;
-			}
-
-			html.her #progress-bar {
-				display: none;
-			}
-		}
-
-		@keyframes pulse {
-			50% {
-				opacity: 0.65;
-			}
-		}
-
-		.animate-pulse-fast {
-			animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-		}
-	</style>
+            <div class="nebula-glow"></div>
+            
+            <div class="brand-text">NEBULA AI</div>
+            
+            <div class="loading-line"></div>
+        </div>
+        </body>
 </html>
